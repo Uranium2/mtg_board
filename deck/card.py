@@ -1,3 +1,4 @@
+import json
 import uuid as iduu
 from io import BytesIO
 from pathlib import Path
@@ -28,9 +29,33 @@ class Card:
         self.screen = screen
         self.rect = pygame.Rect(self.position, CARD_SIZE)
         if uuid:
-            self.uuid = uuid
+            self.uuid = str(uuid)
         else:
-            self.uuid = iduu.uuid4()
+            self.uuid = str(iduu.uuid4())
+
+    def to_json(self):
+        return json.dumps(
+            {
+                "class": "Card",
+                "name": self.name,
+                "face_up": self.face_up,
+                "tapped": self.tapped,
+                "position": self.position,
+                "uuid": self.uuid,
+            }
+        )
+
+    @staticmethod
+    def from_json(json_data, screen=None):
+        data = json.loads(json_data)
+        return Card(
+            name=data["name"],
+            face_up=data["face_up"],
+            tapped=data["tapped"],
+            position=tuple(data["position"]),
+            uuid=data["uuid"],
+            screen=screen,
+        )
 
     def fetch_image_url(self):
         try:

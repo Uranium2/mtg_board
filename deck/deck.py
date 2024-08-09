@@ -1,3 +1,4 @@
+import json
 import random
 from collections import deque
 
@@ -19,6 +20,33 @@ class Deck:
         ]
         self.reset_deck()
         self.screen_width, self.screen_height = screen.get_size()
+
+    def to_json(self):
+        return json.dumps(
+            {
+                "class": "Deck",
+                "commander": self.commander.to_json(),
+                "original_library": [card.to_json() for card in self.original_library],
+                "hand": [card.to_json() for card in self.hand],
+                "graveyard": [card.to_json() for card in self.graveyard],
+                "exile": [card.to_json() for card in self.exile],
+                "board": [card.to_json() for card in self.board],
+            }
+        )
+
+    @staticmethod
+    def from_json(json_data, screen):
+        data = json.loads(json_data)
+        deck = Deck(
+            commander=Card.from_json(data["commander"], screen),
+            cards=[Card.from_json(card, screen) for card in data["original_library"]],
+            screen=screen,
+        )
+        deck.hand = [Card.from_json(card, screen) for card in data["hand"]]
+        deck.graveyard = [Card.from_json(card, screen) for card in data["graveyard"]]
+        deck.exile = [Card.from_json(card, screen) for card in data["exile"]]
+        deck.board = [Card.from_json(card, screen) for card in data["board"]]
+        return deck
 
     def reset_deck(self):
         self.library = deque(self.original_library)

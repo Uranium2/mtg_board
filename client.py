@@ -10,22 +10,35 @@ from utils.mtg_arena_loader import load_deck_from_file
 # from utils.menu import Menu
 
 
-DESIRED_FPS = 30.0  # 30 frames per second
+DESIRED_FPS = 10.0  # 30 frames per second
 
 
 class CardGameClientProtocol(Protocol):
+    def __init__(self, factory, player):
+        self.factory = factory
+        self.player = player
+
     def connectionMade(self):
-        player = Player(user_name="Antoine")
+        # Store a reference to this protocol instance
+        self.factory.protocol_instance = self
         print("Connected to server")
-        self.transport.write(player.to_json().encode())
+        self.transport.write(self.player.to_json().encode())
+
+    def dataReceived(self, data):
+        message = data.decode()
+        print(f"Received: {message}")
 
     def send_data(self, data):
         self.transport.write(data.encode())
 
 
 class CardGameClientFactory(ClientFactory):
+    def __init__(self, player):
+        self.player = player
+        self.protocol_instance = None
+
     def buildProtocol(self, addr):
-        return CardGameClientProtocol()
+        return CardGameClientProtocol(self, self.player)
 
 
 dragging = False
@@ -34,7 +47,7 @@ selected_card = None
 menu = None
 
 
-def game_tick():
+def game_tick(factory):
     global dragging, offset, selected_card, menu_opened
 
     events = pygame.event.get()
@@ -85,6 +98,9 @@ def game_tick():
                 new_position = (event.pos[0] + offset[0], event.pos[1] + offset[1])
                 selected_card.update_position(new_position)
 
+    if factory.protocol_instance:
+        factory.protocol_instance.send_data(deck.to_json())
+
     if menu.menu and menu.menu.is_enabled() and menu.should_close:
         menu.menu.disable()
 
@@ -119,10 +135,12 @@ if __name__ == "__main__":
 
     deck.draw_initial_hand()
 
+    player = Player(user_name="Antoine")
+    factory = CardGameClientFactory(player)
     # Start Twisted client
-    reactor.connectTCP("localhost", 8000, CardGameClientFactory())
+    reactor.connectTCP("localhost", 8000, factory)
 
-    tick = LoopingCall(game_tick)
+    tick = LoopingCall(game_tick, factory)
     tick.start(1.0 / DESIRED_FPS)
 
     reactor.run()
