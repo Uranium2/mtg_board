@@ -1,0 +1,5 @@
+twisted
+pygame
+pygame-menu
+requests
+scrython

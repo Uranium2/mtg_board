@@ -102,7 +102,12 @@ def game_tick():
 if __name__ == "__main__":
     pygame.init()
 
-    screen = pygame.display.set_mode((1920, 1080))
+    # Get the current display info
+    info = pygame.display.Info()
+
+    # Set the display mode to the real screen size
+    screen = pygame.display.set_mode((info.current_w, info.current_h))
+    # screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
     pygame.display.set_caption("MTG Client")
 
     commander = "Atraxa, Praetors' Voice"

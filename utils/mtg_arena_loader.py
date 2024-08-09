@@ -13,7 +13,7 @@ def load_deck_from_file(file_path, screen):
         lines = file.readlines()
 
     cards = []
-    commander = lines[0].split(" ", 1)[1].strip()
+    commander = lines[0].split("(")[0].split(" ", 1)[1].strip()
     for line in lines[1:]:
         line = line.split("(")[0]
         line = line.split(" ")
