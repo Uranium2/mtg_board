@@ -1,38 +1,54 @@
 import json
 import random
+import uuid as iduu
 from collections import deque
 
 from deck.card import Card
 
 
 class Deck:
-    def __init__(self, commander, cards, screen):
-        if len(cards) != 99:
-            raise ValueError(
-                f"A Commander deck must have exactly 99 cards. You have {len(cards)} cards"
+    def __init__(self, commander, cards, screen, uuid=None, is_import=False):
+        if not is_import:
+            if len(cards) != 99:
+                raise ValueError(
+                    f"A Commander deck must have exactly 99 cards. You have {len(cards)} cards"
+                )
+            self.commander = Card(
+                commander,
+                face_up=True,
+                tapped=False,
+                screen=screen,
+                position=(1600, 700),
             )
-        self.commander = Card(
-            commander, face_up=True, tapped=False, screen=screen, position=(1600, 700)
-        )
-        self.original_library = [
-            Card(name=card_name, face_up=True, tapped=False, screen=screen)
-            for card_name in cards
-        ]
-        self.reset_deck()
-        self.screen_width, self.screen_height = screen.get_size()
+            self.original_library = [
+                Card(name=card_name, face_up=True, tapped=False, screen=screen)
+                for card_name in cards
+            ]
+            self.reset_deck()
+            self.screen_width, self.screen_height = screen.get_size()
+            if uuid:
+                self.uuid = str(uuid)
+            else:
+                self.uuid = str(iduu.uuid4())
+        else:
+            self.commander = commander
+            self.cards = cards
+            self.original_library = self.cards
+            self.screen = screen
+            self.uuid = uuid
 
     def to_json(self):
-        return json.dumps(
-            {
-                "class": "Deck",
-                "commander": self.commander.to_json(),
-                "original_library": [card.to_json() for card in self.original_library],
-                "hand": [card.to_json() for card in self.hand],
-                "graveyard": [card.to_json() for card in self.graveyard],
-                "exile": [card.to_json() for card in self.exile],
-                "board": [card.to_json() for card in self.board],
-            }
-        )
+        deck_dict = {
+            "uuid": self.uuid,
+            "commander": self.commander.to_json(),
+            "original_library": [card.to_json() for card in self.original_library],
+            "hand": [card.to_json() for card in self.hand],
+            "graveyard": [card.to_json() for card in self.graveyard],
+            "exile": [card.to_json() for card in self.exile],
+            "board": [card.to_json() for card in self.board],
+        }
+        json_string = json.dumps(deck_dict)
+        return json_string
 
     @staticmethod
     def from_json(json_data, screen):
@@ -41,11 +57,14 @@ class Deck:
             commander=Card.from_json(data["commander"], screen),
             cards=[Card.from_json(card, screen) for card in data["original_library"]],
             screen=screen,
+            uuid=data["uuid"],
+            is_import=True,
         )
         deck.hand = [Card.from_json(card, screen) for card in data["hand"]]
         deck.graveyard = [Card.from_json(card, screen) for card in data["graveyard"]]
         deck.exile = [Card.from_json(card, screen) for card in data["exile"]]
         deck.board = [Card.from_json(card, screen) for card in data["board"]]
+        deck.library = deque(deck.original_library)
         return deck
 
     def reset_deck(self):
@@ -61,7 +80,6 @@ class Deck:
         for i, card in enumerate(self.hand):
             card.face_up = True
             card.tapped = False
-            # card.update_position((0 + (i * 150), 900))
             card.display_card()
 
         # Draw players board

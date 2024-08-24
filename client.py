@@ -1,8 +1,10 @@
+
 import pygame
 from twisted.internet import reactor
 from twisted.internet.protocol import ClientFactory, Protocol
 from twisted.internet.task import LoopingCall
 
+from deck.deck import Deck
 from player.player import Player
 from utils.menu import RightMenu
 from utils.mtg_arena_loader import load_deck_from_file
@@ -10,7 +12,11 @@ from utils.mtg_arena_loader import load_deck_from_file
 # from utils.menu import Menu
 
 
-DESIRED_FPS = 10.0  # 30 frames per second
+DESIRED_FPS = 60.0  # 30 frames per second
+DATA_SEND_RATE = 0.1
+
+DECKS = {}
+UUID_DECK = None
 
 
 class CardGameClientProtocol(Protocol):
@@ -22,13 +28,14 @@ class CardGameClientProtocol(Protocol):
         # Store a reference to this protocol instance
         self.factory.protocol_instance = self
         print("Connected to server")
-        self.transport.write(self.player.to_json().encode())
 
     def dataReceived(self, data):
         message = data.decode()
-        print(f"Received: {message}")
+        reveived_deck = Deck.from_json(message, SCREEN)
+        DECKS[reveived_deck.uuid] = reveived_deck
 
     def send_data(self, data):
+        # append player class to data ?
         self.transport.write(data.encode())
 
 
@@ -47,7 +54,8 @@ selected_card = None
 menu = None
 
 
-def game_tick(factory):
+def game_tick():
+    client_deck = DECKS[UUID_DECK]
     global dragging, offset, selected_card, menu_opened
 
     events = pygame.event.get()
@@ -71,7 +79,11 @@ def game_tick(factory):
                     continue  # Skip the rest of the logic if the click was inside the menu
 
             if event.button == 1:  # LEFT CLICK
-                for cards in [deck.board, deck.hand, deck.graveyard]:
+                for cards in [
+                    client_deck.board,
+                    client_deck.hand,
+                    client_deck.graveyard,
+                ]:
                     for card in cards:
                         if card.is_clicked(event.pos):
                             dragging = True
@@ -82,11 +94,15 @@ def game_tick(factory):
                             )
                             break
             elif event.button == 3:  # RIGHT CLICK
-                for cards in [deck.board, deck.hand, deck.graveyard, deck.library]:
+                for cards in [
+                    client_deck.board,
+                    client_deck.hand,
+                    client_deck.graveyard,
+                    client_deck.library,
+                ]:
                     for card in cards:
                         if card.is_clicked(event.pos):
-                            print(card)
-                            menu.create_menu(event.pos, card, deck)
+                            menu.create_menu(event.pos, card, client_deck)
                             selected_card = card
                             break
 
@@ -98,21 +114,25 @@ def game_tick(factory):
                 new_position = (event.pos[0] + offset[0], event.pos[1] + offset[1])
                 selected_card.update_position(new_position)
 
-    if factory.protocol_instance:
-        factory.protocol_instance.send_data(deck.to_json())
-
     if menu.menu and menu.menu.is_enabled() and menu.should_close:
         menu.menu.disable()
 
-    screen.fill("black")
+    SCREEN.fill("black")
 
     # Render all cards
-    deck.render()
+    for deck_key, deck in DECKS.items():
+        print(deck_key)
+        deck.render()
 
     if menu:
         menu.update(events)
 
     pygame.display.flip()
+
+
+def send_data_tick(factory):
+    if factory.protocol_instance:
+        factory.protocol_instance.send_data(DECKS[UUID_DECK].to_json())
 
 
 if __name__ == "__main__":
@@ -122,16 +142,18 @@ if __name__ == "__main__":
     info = pygame.display.Info()
 
     # Set the display mode to the real screen size
-    screen = pygame.display.set_mode((info.current_w, info.current_h))
+    SCREEN = pygame.display.set_mode((info.current_w, info.current_h))
     # screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
     pygame.display.set_caption("MTG Client")
 
     commander = "Atraxa, Praetors' Voice"
     card_names = ["Plains" for i in range(99)]
 
-    menu = RightMenu(screen)
+    menu = RightMenu(SCREEN)
 
-    deck = load_deck_from_file("data/decks/1.txt", screen)
+    deck = load_deck_from_file("data/decks/1.txt", SCREEN)
+    DECKS[deck.uuid] = deck
+    UUID_DECK = deck.uuid
 
     deck.draw_initial_hand()
 
@@ -140,7 +162,12 @@ if __name__ == "__main__":
     # Start Twisted client
     reactor.connectTCP("localhost", 8000, factory)
 
-    tick = LoopingCall(game_tick, factory)
-    tick.start(1.0 / DESIRED_FPS)
+    # Pygame rendering loop
+    game_loop = LoopingCall(game_tick)
+    game_loop.start(1.0 / DESIRED_FPS)
+
+    # Twisted network loop
+    network_loop = LoopingCall(send_data_tick, factory)
+    network_loop.start(1.0 / DATA_SEND_RATE)
 
     reactor.run()

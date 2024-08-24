@@ -15,7 +15,14 @@ CARD_SIZE = (WIDTH, HEIGHT)
 
 class Card:
     def __init__(
-        self, name, face_up=True, tapped=False, screen=None, uuid=None, position=None
+        self,
+        name,
+        face_up=True,
+        tapped=False,
+        screen=None,
+        uuid=None,
+        position=None,
+        url=None,
     ):
         self.name = name
         self.face_up = face_up
@@ -24,14 +31,15 @@ class Card:
             self.position = (0, 0)
         else:
             self.position = position
-        self.img_front = self.load_image()
-        self.img_back = self.load_back_image()
+        self.url = url
         self.screen = screen
         self.rect = pygame.Rect(self.position, CARD_SIZE)
         if uuid:
             self.uuid = str(uuid)
         else:
             self.uuid = str(iduu.uuid4())
+        self.img_front = self.load_image()
+        self.img_back = self.load_back_image()
 
     def to_json(self):
         return json.dumps(
@@ -42,22 +50,27 @@ class Card:
                 "tapped": self.tapped,
                 "position": self.position,
                 "uuid": self.uuid,
+                "url": self.url,
             }
         )
 
     @staticmethod
     def from_json(json_data, screen=None):
         data = json.loads(json_data)
-        return Card(
+        card = Card(
             name=data["name"],
             face_up=data["face_up"],
             tapped=data["tapped"],
             position=tuple(data["position"]),
             uuid=data["uuid"],
             screen=screen,
+            url=data["url"],
         )
+        return card
 
     def fetch_image_url(self):
+        if self.url:
+            return
         try:
             print(f"Getting {self.name} from scrython")
             card = scrython.cards.Named(fuzzy=self.name)
@@ -73,22 +86,23 @@ class Card:
         Rect:{self.rect},
         Face-up: {self.face_up},
         Tapped: {self.tapped},
-        URL: {self.url},
+        url: {self.url},
         pos: {self.position}.
-
         """
 
     def load_image(self):
         image_file = f"data/{self.name}.jpg"
+        image_file = image_file.replace("//", "")
         my_file = Path(image_file)
-        if not my_file.is_file():
+        if not self.url:
             self.fetch_image_url()
+        if not my_file.is_file():
             response = requests.get(self.url)
             content = response.content
             open(image_file, "wb").write(content)
+            print(f"{image_file} saved")
             image_file = BytesIO(content)
         else:
-            self.url = image_file
             print(f"Use local cache image for {self.name}")
         image = pygame.image.load(image_file)
         image = pygame.transform.scale(image, CARD_SIZE)
